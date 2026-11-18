@@ -1,0 +1,173 @@
+
+name: Build Quotex Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create Android project
+        run: |
+          mkdir -p app/src/main/java/com/example/quotexsignal
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "QuotexSignalBot"
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.example.quotexsignal'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.example.quotexsignal'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="Quotex Signal Demo"
+                  android:allowBackup="false">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/example/quotexsignal/MainActivity.java <<'EOF'
+          package com.example.quotexsignal;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.widget.*;
+
+          public class MainActivity extends Activity {
+              TextView result;
+
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setGravity(Gravity.CENTER);
+                  layout.setPadding(28, 35, 28, 35);
+                  layout.setBackgroundColor(Color.rgb(18, 22, 32));
+
+                  TextView title = new TextView(this);
+                  title.setText("QUOTEX OTC SIGNAL");
+                  title.setTextSize(25);
+                  title.setTextColor(Color.WHITE);
+                  title.setGravity(Gravity.CENTER);
+                  layout.addView(title);
+
+                  TextView info = new TextView(this);
+                  info.setText("Mobile Signal Demo • 1 Minute");
+                  info.setTextColor(Color.LTGRAY);
+                  info.setTextSize(16);
+                  info.setGravity(Gravity.CENTER);
+                  layout.addView(info);
+
+                  result = new TextView(this);
+                  result.setText("Press the button to see an example");
+                  result.setTextColor(Color.WHITE);
+                  result.setTextSize(20);
+                  result.setGravity(Gravity.CENTER);
+                  result.setPadding(10, 45, 10, 45);
+                  layout.addView(result);
+
+                  Button button = new Button(this);
+                  button.setText("SHOW DEMO EXAMPLE");
+                  layout.addView(button);
+
+                  button.setOnClickListener(v ->
+                      result.setText("EUR/USD OTC\\nCALL\\nDEMO ONLY — NOT A LIVE SIGNAL")
+                  );
+
+                  TextView warning = new TextView(this);
+                  warning.setText(
+                      "This app does not connect to Quotex or receive live OTC prices. " +
+                      "Examples are not predictions or financial advice. " +
+                      "No trades are placed."
+                  );
+                  warning.setTextColor(Color.YELLOW);
+                  warning.setTextSize(14);
+                  warning.setGravity(Gravity.CENTER);
+                  warning.setPadding(8, 35, 8, 8);
+                  layout.addView(warning);
+
+                  setContentView(layout);
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quotex-Signal-Demo-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
