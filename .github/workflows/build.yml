@@ -42,7 +42,7 @@ def analyze():
 
         close = df["close"].astype(float)
 
-        # EMA
+        # EM
         df["EMA9"] = close.ewm(
             span=EMA_FAST, adjust=False
         ).mean()
