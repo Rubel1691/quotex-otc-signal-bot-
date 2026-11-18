@@ -1,0 +1,128 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+# QUOTEX SIGNAL BOT
+# 1 Minute | RSI + MACD + EMA
+
+CSV_FILE = "candles.csv"
+
+RSI_PERIOD = 14
+EMA_FAST = 9
+EMA_SLOW = 21
+
+def calculate_rsi(close, period=14):
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(
+        alpha=1/period, min_periods=period
+    ).mean()
+
+    avg_loss = loss.ewm(
+        alpha=1/period, min_periods=period
+    ).mean()
+
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+def analyze():
+    try:
+        df = pd.read_csv(CSV_FILE)
+
+        required = {"open", "high", "low", "close"}
+        if not required.issubset(df.columns):
+            print("CSV columns missing!")
+            return
+
+        if len(df) < 60:
+            print("Need at least 60 candles.")
+            return
+
+        close = df["close"].astype(float)
+
+        # EMA
+        df["EMA9"] = close.ewm(
+            span=EMA_FAST, adjust=False
+        ).mean()
+
+        df["EMA21"] = close.ewm(
+            span=EMA_SLOW, adjust=False
+        ).mean()
+
+        # RSI
+        df["RSI"] = calculate_rsi(close, RSI_PERIOD)
+
+        # MACD
+        ema12 = close.ewm(
+            span=12, adjust=False
+        ).mean()
+
+        ema26 = close.ewm(
+            span=26, adjust=False
+        ).mean()
+
+        df["MACD"] = ema12 - ema26
+
+        df["SIGNAL"] = df["MACD"].ewm(
+            span=9, adjust=False
+        ).mean()
+
+        last = df.iloc[-1]
+
+        price = last["close"]
+        rsi = last["RSI"]
+        macd = last["MACD"]
+        signal = last["SIGNAL"]
+        ema9 = last["EMA9"]
+        ema21 = last["EMA21"]
+
+        if pd.isna(rsi) or pd.isna(signal):
+            print("Not enough valid data.")
+            return
+
+        # CALL conditions
+        call = (
+            price > ema9 > ema21
+            and 50 < rsi < 70
+            and macd > signal
+        )
+
+        # PUT conditions
+        put = (
+            price < ema9 < ema21
+            and 30 < rsi < 50
+            and macd < signal
+        )
+
+        print("\n----------------------")
+        print("QUOTEX BOT")
+        print(datetime.now())
+        print("----------------------")
+        print("Price:", round(price, 5))
+        print("RSI:", round(rsi, 2))
+        print("EMA 9:", round(ema9, 5))
+        print("EMA 21:", round(ema21, 5))
+        print("MACD:", round(macd, 5))
+
+        if call:
+            print("\nSIGNAL: CALL 🟢")
+            print("Expiry: 1 Minute")
+        elif put:
+            print("\nSIGNAL: PUT 🔴")
+            print("Expiry: 1 Minute")
+        else:
+            print("\nSIGNAL: NO TRADE ⚪")
+
+        print("----------------------")
+
+    except FileNotFoundError:
+        print("candles.csv file not found!")
+
+    except Exception as error:
+        print("Error:", error)
+
+
+if __name__ == "__main__":
+    analyze()
